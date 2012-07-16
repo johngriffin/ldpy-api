@@ -1,25 +1,18 @@
 import os
-import elasticsearch
 import simplejson
 from flask import Flask
 from flask import Response
+from flask import request
+import elasticsearch
 
 app = Flask(__name__)
 
+#TODO   - proper error reporting when ElasticSearchException
+#       - caching, we're hitting ES every request atm
+
 @app.route('/')
 def hello():
-    return 'Hello World!'
-
-@app.route('/user/<username>')
-def show_user_profile(username):
-    # show the user profile for that user
-    return 'Usser %s' % username
-
-#   (r'^(?P<index>\w+)$', 'model'),
-#   (r'^(?P<index>\w+)/dimensions$', 'dimensions'),
-#   (r'^(?P<index>\w+)/dimensions/(?P<dimension>\w+)$', 'dimension'),
-#   (r'^(?P<index>\w+)/dimensions/(?P<dimension>\w+)/query$', 'query'),
-
+    return 'All valid paths begin with "/api/"'
 
 @app.route('/api/<index>/')
 def model(index):
@@ -74,7 +67,7 @@ def model(index):
     }
     return Response(simplejson.dumps(model), status=200, mimetype='application/json')
 
-#TODO - proper error reporting when ElasticSearchException
+
 @app.route('/api/<index>/dimensions/')
 def dimensions(index):
     """ Return all dimension values for the requested type """
@@ -117,12 +110,114 @@ def dimensions(index):
         values[value['_type']][value['_source']['id']] = value['_source']
 
     # Render response
-    resp = Response(simplejson.dumps(values), status=200, mimetype='application/json')
-    return resp
+    return Response(simplejson.dumps(values), status=200, mimetype='application/json')
 
+@app.route('/api/<index>/dimensions/<dimension>/')
+def dimension(index, dimension):
+    """ Return values for the requested dimension """
 
+    # Build query to return values for dimension
+    params = {
+        'size': 10000, # Hack: Assume there's less than 10000 values
+        'filter': {
+            'or': [{
+                'type': {
+                    'value': dimension
+                }
+             }]
+        }
+    }
 
+    # Request values for dimension
+    try:
+        response = elasticsearch.request('search', index, None, params)
+    except elasticsearch.ElasticSearchException, e:
+        return Response(e, status=500, mimetype='text/plain')
 
+    # Build a dict of dimensions where each dimension is a dict
+    # of all the dimension's values
+    values = {}
+    for value in response['hits']['hits']:
+
+        if value['_type'] not in values:
+            values[value['_type']] = {}
+
+        values[value['_type']][value['_source']['id']] = value['_source']
+
+    # Render response
+    return Response(simplejson.dumps(values), status=200, mimetype='application/json')
+
+@app.route('/test/')
+def test():
+    print 'test'
+    print request.args
+    print 'nothing'
+
+    return request.args
+
+@app.route('/api/<index>/dimensions/<dimension>/query/')
+def query(index, dimension):
+    """ Return aggregates of measures the requested dimension """
+    print request.args
+
+    # Build query to return stats for the dimension
+    params = {
+        'size': 0,
+        'query': {
+            'match_all': {}
+        },
+        'facets': {}
+    }
+
+    # Build filters from requested cut
+    filters = []
+    for key in request.args.keys():
+        print 'inley'
+        print key
+        if key != dimension:
+            filters.append({
+                'term': {
+                    key: request.args.get(key, '')
+                }
+            })
+
+    params['facets'][dimension] = {
+        'terms_stats': {
+            'key_field': dimension,
+            'value_field': 'value',
+            'all_terms': True
+        },
+    }
+
+    # Filter dimension by requested cut
+    if len(filters) > 0:
+        params['facets'][dimension]['facet_filter'] = {
+            'and': filters
+        }
+
+    # Make request
+    try:
+        response = elasticsearch.request('search', index, 'observation', params)
+    except elasticsearch.ElasticSearchException, e:
+     return Response(e, status=500, mimetype='text/plain')
+
+    # Build a dict of dimensions where each dimension is a list
+    # of all the dimension's values' IDs and stats
+    aggregates = {}
+    for facet in response['facets']:
+        aggregates[facet] = []
+
+        for value in response['facets'][facet]['terms']:
+            aggregates[facet].append({
+                'id': value['term'],
+                'min': value['min'],
+                'max': value['max'],
+                'total': value['total'],
+                'mean': value['mean']
+            })
+
+    # Render response
+    return Response(simplejson.dumps(aggregates), status=200, mimetype='application/json')
 
 if __name__ == '__main__':
     # Bind to PORT if defined, otherwise default to 5000.
