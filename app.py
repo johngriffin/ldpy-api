@@ -5,11 +5,19 @@ from flask import Response
 from flask import request
 import elasticsearch
 
-app = Flask(__name__)
-
 #TODO   - proper error reporting when ElasticSearchException
 #       - caching, we're hitting ES every request atm
 
+app = Flask(__name__)
+
+# Config
+if 'ES_HOST' in os.environ:
+    app.config['ES_HOST'] = os.environ['ES_HOST']
+else:
+    app.config['ES_HOST'] = 'localhost:9200'
+
+
+# Routing
 @app.route('/')
 def hello():
     return 'All valid paths begin with "/api/"'
@@ -224,5 +232,3 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
    # app.debug = True
     app.run(host='0.0.0.0', port=port)
-
-

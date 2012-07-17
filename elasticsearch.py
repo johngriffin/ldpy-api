@@ -1,10 +1,14 @@
 import httplib
 import hashlib
 import simplejson
+from flask import request
+from app import app
+
 #from django.core.cache import cache
 
 caching = False
-es_host = 'localhost:9200'
+es_host = app.config['ES_HOST']
+
 
 def get_dimensions(index):
     """ Get all dimensions """
