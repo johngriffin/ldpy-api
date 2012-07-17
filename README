@@ -1,0 +1,48 @@
+API for driving dataCube interactive visualisations.
+
+Methods
+=======
+Dataset model
+api/<dataset>
+
+Dimension model
+api/<dataset>/dimensions/<dimension>
+
+Aggregate measure data
+api/<dataset>/dimensions/<dimension>/query
+
+Query (only cut currently supported)
+api/<dataset>/dimensions/<dimension>/query?<query>
+
+Example Parameters
+------------------
+<dataset> = "mortality"
+<dimension> = "area"
+<query> = "gender=F"
+
+
+Dataset Model
+=============
+{
+    'id': 'mortality',
+    'dimensions': [
+        {
+            'id': 'gender',
+            'type': 'bar',
+            'model': '/api/mortality/dimensions/gender',
+            'cut': '/api/mortality/dimensions/gender/query',
+        },
+        {
+            'id': 'disease',
+            'type': 'bar',
+            'model': '/api/mortality/dimensions/disease',
+            'cut': '/api/mortality/dimensions/disease/query',
+        },
+        {
+            'id': 'area',
+            'type': 'geo',
+            'model': '/api/mortality/dimensions/area',
+            'cut': '/api/mortality/dimensions/area/query',
+        }
+    ]
+}
